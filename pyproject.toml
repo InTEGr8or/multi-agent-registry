@@ -12,7 +12,12 @@ license = { text = "MIT" }
 authors = [
     { name = "Mark Stouffer", email = "1802850+InTEGr8or@users.noreply.github.com" }
 ]
-dependencies = []
+dependencies = [
+    "verkit @ file:///home/mstouffer/repos/verkit",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
