@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-cli-registry"
-version = "0.1.0"
+version = "0.1.1"
 description = "Unified detection, configuration, and chat discovery registry for AI coding agent CLIs"
 readme = "README.md"
 requires-python = ">=3.12"
