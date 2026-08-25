@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agent-registry"
+version = "0.1.0"
+description = "Unified detection, configuration, and chat discovery registry for AI coding agent CLIs"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [
+    { name = "Mark Stouffer", email = "1802850+InTEGr8or@users.noreply.github.com" }
+]
+dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
