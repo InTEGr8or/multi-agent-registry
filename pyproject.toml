@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agent-registry"
+name = "agent-cli-registry"
 version = "0.1.0"
 description = "Unified detection, configuration, and chat discovery registry for AI coding agent CLIs"
 readme = "README.md"
@@ -13,8 +13,11 @@ authors = [
     { name = "Mark Stouffer", email = "1802850+InTEGr8or@users.noreply.github.com" }
 ]
 dependencies = [
-    "verkit @ file:///home/mstouffer/repos/verkit",
+    "verkit>=0.1.4",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_registry"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
