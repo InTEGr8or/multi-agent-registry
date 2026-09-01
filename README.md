@@ -1,23 +1,23 @@
-# Agent Registry 🤖
+# Multi-Agent Registry 🤖
 
 Unified detection, configuration, plugin, and chat history discovery registry for AI coding agent CLIs.
 
-`agent_registry` gives any tool a single place to ask "which AI coding agents are installed on this machine, where do they keep their config/plugins, and where did they leave their chat history?" — instead of every consumer re-implementing per-agent path guessing.
+`multi_agent_registry` gives any tool a single place to ask "which AI coding agents are installed on this machine, where do they keep their config/plugins, and where did they leave their chat history?" — instead of every consumer re-implementing per-agent path guessing.
 
 ---
 
 ## Installation
 
 ```bash
-pip install agent-cli-registry
+pip install multi-agent-registry
 # or using uv
-uv add agent-cli-registry
+uv add multi-agent-registry
 ```
 
-The PyPI **distribution** name is `agent-cli-registry`; the importable **module** name is `agent_registry`:
+The PyPI **distribution** name is `multi-agent-registry`; the importable **module** name is `multi_agent_registry`:
 
 ```python
-import agent_registry
+import multi_agent_registry
 ```
 
 ## Features
@@ -31,7 +31,7 @@ import agent_registry
 ## Quickstart
 
 ```python
-from agent_registry import get_agent_cli_registry, discover_agent_chats, get_chat_workspace
+from multi_agent_registry import get_agent_cli_registry, discover_agent_chats, get_chat_workspace
 
 # What agents does this machine have?
 for agent_id, info in get_agent_cli_registry().items():
@@ -48,7 +48,7 @@ for chat in discover_agent_chats(agent_id="claude"):
 ### Registry & detection
 
 ```python
-from agent_registry import AgentCLIInfo, get_agent_cli_registry, inspect_agent_cli, inspect_all_agent_clis
+from multi_agent_registry import AgentCLIInfo, get_agent_cli_registry, inspect_agent_cli, inspect_all_agent_clis
 
 registry: dict[str, AgentCLIInfo] = get_agent_cli_registry()
 info = registry["claude"]
@@ -66,7 +66,7 @@ all_status = inspect_all_agent_clis()  # same, for every registered agent
 ### Chat discovery
 
 ```python
-from agent_registry import DiscoveredChat, discover_agent_chats
+from multi_agent_registry import DiscoveredChat, discover_agent_chats
 from pathlib import Path
 
 # All chats for one agent, scanned globally (patterns rooted at ~ or /)
@@ -83,7 +83,7 @@ Agents currently wired up for chat discovery: `claude`, `agy` (Antigravity), `op
 ### Chat inspection
 
 ```python
-from agent_registry import get_chat_workspace, get_chat_last_active
+from multi_agent_registry import get_chat_workspace, get_chat_last_active
 
 get_chat_workspace(chat)     # -> Path | None, the project dir the chat belongs to
 get_chat_last_active(chat)   # -> datetime | None, true last-message time (jsonl only for now);

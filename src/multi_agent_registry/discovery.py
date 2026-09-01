@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 from typing import List, Optional
 
-from agent_registry.registry import AgentCLIInfo, get_agent_cli_registry
+from multi_agent_registry.registry import AgentCLIInfo, get_agent_cli_registry
 
 EXCLUDED_DIR_NAMES = {"node_modules", ".venv", ".git", ".gwt"}
 

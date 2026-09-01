@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_registry import (
+from multi_agent_registry import (
     AgentCLIInfo,
     DiscoveredChat,
     discover_agent_chats,
