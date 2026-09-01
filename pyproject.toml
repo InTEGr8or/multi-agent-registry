@@ -16,6 +16,12 @@ dependencies = [
     "verkit>=0.1.4",
 ]
 
+[tool.hatch.build]
+exclude = [
+    "docs/",
+    ".task-agent/",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/multi_agent_registry"]
 
