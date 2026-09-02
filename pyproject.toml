@@ -14,7 +14,12 @@ authors = [
 ]
 dependencies = [
     "verkit>=0.1.4",
+    "rich>=13.9.4",
 ]
+
+[project.scripts]
+multi-agent-registry = "multi_agent_registry.cli:main"
+mar = "multi_agent_registry.cli:main"
 
 [tool.hatch.build]
 exclude = [
