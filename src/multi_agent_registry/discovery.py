@@ -172,18 +172,43 @@ def get_chat_workspace(chat: DiscoveredChat) -> Optional[Path]:
             # Leading lines are often session metadata (mode, snapshots) with
             # no `cwd` field; scan forward (capped) for the first one that
             # has it rather than assuming line 1.
-            with open(chat.path, "r") as f:
+            with open(chat.path, "r", encoding="utf-8", errors="replace") as f:
                 for _, line in zip(range(200), f):
                     line = line.strip()
                     if not line:
                         continue
                     try:
                         data = json.loads(line)
-                    except json.JSONDecodeError:
+                    except Exception:
                         continue
                     cwd = data.get("cwd")
                     if cwd:
                         return Path(cwd)
+
+                    # Check tool_calls args (e.g. Antigravity CLI transcript logs)
+                    for tc in data.get("tool_calls") or []:
+                        args = tc.get("args") or {}
+                        for key in (
+                            "Cwd",
+                            "DirectoryPath",
+                            "SearchDirectory",
+                            "TargetFile",
+                            "SearchPath",
+                        ):
+                            val = args.get(key)
+                            if val:
+                                clean_val = str(val).strip('"').strip("'")
+                                if clean_val.startswith("/"):
+                                    p = Path(clean_val)
+                                    return p if p.is_dir() else p.parent
+
+                    # Check content string for workspace user info paths
+                    content = str(data.get("content") or "")
+                    match = re.search(
+                        r"(/home/[^/\s\n'\"]+/repos/[^/\s\n'\"]+)", content
+                    )
+                    if match:
+                        return Path(match.group(1))
         elif chat.parser_type == "markdown":
             return chat.path.parent
         elif chat.parser_type == "json":

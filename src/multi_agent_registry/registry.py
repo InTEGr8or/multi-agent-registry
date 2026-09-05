@@ -61,11 +61,11 @@ def get_agent_cli_registry() -> Dict[str, AgentCLIInfo]:
             skills_path=home / ".gemini" / "config" / "skills",
             plugin_template="antigravity",
             chat_log_patterns=[
-                "~/.gemini/tmp/**/chats/session-*.json",
+                "~/.gemini/antigravity-cli/brain/*/.system_generated/logs/transcript.jsonl",
                 "~/.gemini/antigravity-cli/brain/**/transcript.jsonl",
-                "~/.gemini/antigravity-cli/brain/**/transcript_full.jsonl",
+                "~/.gemini/tmp/**/chats/session-*.json",
             ],
-            chat_parser_type="json",
+            chat_parser_type="jsonl",
         ),
         "opencode": AgentCLIInfo(
             id="opencode",
