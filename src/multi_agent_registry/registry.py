@@ -246,7 +246,8 @@ def inspect_agent_cli(agent_id: str) -> dict:
         raise ValueError(f"Unknown agent CLI: '{agent_id}'")
 
     info = registry[agent_id]
-    installed = shutil.which(info.binary) is not None
+    binary_path = shutil.which(info.binary)
+    installed = binary_path is not None
     mcp_registered = False
 
     for config_path in info.config_paths:
@@ -271,12 +272,16 @@ def inspect_agent_cli(agent_id: str) -> dict:
         "id": info.id,
         "name": info.name,
         "binary": info.binary,
+        "binary_path": Path(binary_path) if binary_path else None,
         "description": info.description,
         "installed": installed,
+        "config_paths": info.config_paths,
         "mcp_support": info.mcp_support,
         "mcp_registered": mcp_registered,
         "plugin_support": info.plugin_support,
         "plugin_installed": plugin_installed,
+        "plugin_path": info.plugin_path,
+        "skills_path": info.skills_path,
         "mcp_command_example": info.mcp_command_example,
         "chat_log_patterns": info.chat_log_patterns,
         "chat_parser_type": info.chat_parser_type,

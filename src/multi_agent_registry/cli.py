@@ -1,13 +1,21 @@
 import argparse
+import sys
 
 import verkit  # type: ignore[import-untyped]
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 
-from multi_agent_registry.registry import get_agent_cli_registry, inspect_all_agent_clis
+from multi_agent_registry.discovery import discover_agent_chats
+from multi_agent_registry.registry import (
+    get_agent_cli_registry,
+    inspect_agent_cli,
+    inspect_all_agent_clis,
+)
 from multi_agent_registry.theme import DEFAULT as theme
 
 CHECK = "[green]✓[/green]"
+CROSS = "[red]✗[/red]"
 DASH = "[dim]-[/dim]"
 
 
@@ -63,9 +71,93 @@ def show_portfolio(console: Console):
         console.print("[dim]No registered agent CLIs found on PATH.[/dim]")
 
 
+def show_agent_details(agent_id: str, console: Console):
+    try:
+        status = inspect_agent_cli(agent_id)
+    except ValueError as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        sys.exit(1)
+
+    chats = discover_agent_chats(agent_id=agent_id)
+
+    table = Table(show_header=False, box=None, padding=(0, 2))
+    table.add_column("Property", style="bold cyan")
+    table.add_column("Value")
+
+    table.add_row("ID", status["id"])
+    table.add_row("Name", status["name"])
+    table.add_row("Description", status["description"])
+    table.add_row("Binary", status["binary"])
+    table.add_row(
+        "Installation",
+        f"{CHECK} [green]Installed[/green] ({status['binary_path']})"
+        if status["installed"]
+        else f"{CROSS} [red]Not Installed[/red]",
+    )
+
+    # MCP Integration
+    mcp_text = (
+        f"{CHECK} Supported (Registered: {CHECK if status['mcp_registered'] else CROSS})"
+        if status["mcp_support"]
+        else f"{DASH} Not Supported"
+    )
+    table.add_row("MCP Support", mcp_text)
+    if status["mcp_command_example"]:
+        table.add_row("MCP Command", f"[yellow]{status['mcp_command_example']}[/yellow]")
+
+    # Config Paths
+    cfg_lines = []
+    for p in status["config_paths"]:
+        exists = p.is_file()
+        cfg_lines.append(f"{CHECK if exists else DASH} {p}")
+    table.add_row("Config Paths", "\n".join(cfg_lines) if cfg_lines else DASH)
+
+    # Plugins & Skills
+    table.add_row(
+        "Plugin Support",
+        f"{CHECK} Supported (Installed: {CHECK if status['plugin_installed'] else CROSS})"
+        if status["plugin_support"]
+        else f"{DASH} Not Supported",
+    )
+    if status["plugin_path"]:
+        table.add_row("Plugin Directory", str(status["plugin_path"]))
+    if status["skills_path"]:
+        table.add_row("Skills Directory", str(status["skills_path"]))
+
+    # Chat Log Discovery
+    table.add_row("Chat Parser Type", status["chat_parser_type"])
+    table.add_row(
+        "Chat Log Patterns",
+        "\n".join(f"- {pat}" for pat in status["chat_log_patterns"])
+        if status["chat_log_patterns"]
+        else DASH,
+    )
+    table.add_row("Discovered Chats", f"[bold green]{len(chats)}[/bold green] chat log files found")
+
+    panel = Panel(
+        table,
+        title=f"[bold blue]Agent CLI Details -- {status['name']} ({status['id']})[/bold blue]",
+        expand=False,
+    )
+    console.print(panel)
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Inspect the multi-agent-registry catalog.")
+    parser = argparse.ArgumentParser(
+        description="Inspect and manage the multi-agent-registry catalog.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("-V", "--version", action="store_true", help="Show version info and exit.")
+
+    subparsers = parser.add_subparsers(dest="subcommand", help="Available subcommands")
+
+    # Command: list
+    subparsers.add_parser("list", help="List all registered and locally installed agent CLIs.")
+
+    # Command: show <agent_id>
+    show_parser = subparsers.add_parser("show", help="Show detailed inspection for a specific agent CLI.")
+    show_parser.add_argument("agent_id", help="Agent CLI identifier (e.g. claude, agy, opencode, grok).")
+
     args = parser.parse_args()
 
     console = Console()
@@ -75,9 +167,14 @@ def main():
         )
         return
 
-    show_registry(console)
-    console.print()
-    show_portfolio(console)
+    if args.subcommand == "list":
+        show_registry(console)
+        console.print()
+        show_portfolio(console)
+    elif args.subcommand == "show":
+        show_agent_details(args.agent_id, console)
+    else:
+        parser.print_help()
 
 
 if __name__ == "__main__":
