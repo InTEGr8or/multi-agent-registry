@@ -6,6 +6,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from multi_agent_registry.account import inspect_agent_account
 from multi_agent_registry.discovery import discover_agent_chats
 from multi_agent_registry.registry import (
     get_agent_cli_registry,
@@ -78,6 +79,7 @@ def show_agent_details(agent_id: str, console: Console):
         console.print(f"[bold red]Error:[/bold red] {e}")
         sys.exit(1)
 
+    account = inspect_agent_account(agent_id)
     chats = discover_agent_chats(agent_id=agent_id)
 
     table = Table(show_header=False, box=None, padding=(0, 2))
@@ -94,6 +96,34 @@ def show_agent_details(agent_id: str, console: Console):
         if status["installed"]
         else f"{CROSS} [red]Not Installed[/red]",
     )
+
+    # Account & Authentication State
+    auth_str = (
+        f"{CHECK} [green]Authenticated[/green] ({account.account_type})"
+        if account.authenticated
+        else f"{CROSS} [red]Not Authenticated[/red]"
+    )
+    table.add_row("Auth Status", auth_str)
+    if account.account_identifier:
+        table.add_row("Account Identity", account.account_identifier)
+    if account.organization:
+        table.add_row("Organization", account.organization)
+    if account.billing_type:
+        table.add_row("Billing Tier", account.billing_type)
+    if account.detected_env_vars:
+        table.add_row("Active Env Vars", ", ".join(f"[yellow]{v}[/yellow]" for v in account.detected_env_vars))
+
+    # Quota & Usage Metrics
+    if account.usage_summary:
+        usage_lines = []
+        if "five_hour_utilization_pct" in account.usage_summary:
+            usage_lines.append(f"5-Hour Utilization: [bold green]{account.usage_summary['five_hour_utilization_pct']}%[/bold green]")
+        if "seven_day_utilization_pct" in account.usage_summary:
+            usage_lines.append(f"7-Day Utilization: [bold green]{account.usage_summary['seven_day_utilization_pct']}%[/bold green]")
+        if "configured_model" in account.usage_summary:
+            usage_lines.append(f"Configured Model: [magenta]{account.usage_summary['configured_model']}[/magenta]")
+        if usage_lines:
+            table.add_row("Quota & Usage", "\n".join(usage_lines))
 
     # MCP Integration
     mcp_text = (
