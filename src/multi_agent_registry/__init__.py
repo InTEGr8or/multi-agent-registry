@@ -3,6 +3,7 @@
 from multi_agent_registry.account import (
     AgentAccountDetails,
     inspect_agent_account,
+    inspect_all_agent_accounts,
 )
 from multi_agent_registry.discovery import (
     DiscoveredChat,
@@ -25,6 +26,7 @@ __all__ = [
     "inspect_agent_cli",
     "inspect_all_agent_clis",
     "inspect_agent_account",
+    "inspect_all_agent_accounts",
     "discover_agent_chats",
     "get_chat_workspace",
     "get_chat_last_active",

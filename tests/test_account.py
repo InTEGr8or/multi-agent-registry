@@ -86,3 +86,15 @@ def test_inspect_agent_account_dispatcher(tmp_path: Path):
     acc = inspect_agent_account("claude", home=tmp_path)
     assert isinstance(acc, AgentAccountDetails)
     assert acc.agent_id == "claude"
+
+
+def test_inspect_all_agent_accounts(tmp_path: Path):
+    from multi_agent_registry.account import inspect_all_agent_accounts
+
+    accounts = inspect_all_agent_accounts(home=tmp_path)
+    assert isinstance(accounts, dict)
+    assert "claude" in accounts
+    assert "agy" in accounts
+    assert "opencode" in accounts
+    assert isinstance(accounts["claude"], AgentAccountDetails)
+

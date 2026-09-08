@@ -260,3 +260,14 @@ def inspect_agent_account(agent_id: str, home: Optional[Path] = None) -> AgentAc
         return inspector(home)
 
     return inspect_generic_account(agent_id, home)
+
+
+def inspect_all_agent_accounts(home: Optional[Path] = None) -> Dict[str, AgentAccountDetails]:
+    """Inspect account and quota details for all registered agent CLIs."""
+    from multi_agent_registry.registry import get_agent_cli_registry
+
+    if home is None:
+        home = Path.home()
+
+    registry = get_agent_cli_registry()
+    return {agent_id: inspect_agent_account(agent_id, home=home) for agent_id in registry}

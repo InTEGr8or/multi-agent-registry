@@ -6,7 +6,10 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from multi_agent_registry.account import inspect_agent_account
+from multi_agent_registry.account import (
+    inspect_agent_account,
+    inspect_all_agent_accounts,
+)
 from multi_agent_registry.discovery import discover_agent_chats
 from multi_agent_registry.registry import (
     get_agent_cli_registry,
@@ -172,6 +175,68 @@ def show_agent_details(agent_id: str, console: Console):
     console.print(panel)
 
 
+def show_agent_usage(console: Console):
+    registry = get_agent_cli_registry()
+    installed_map = {status["id"]: status for status in inspect_all_agent_clis()}
+    accounts = inspect_all_agent_accounts()
+
+    table = Table(
+        title="[bold blue]Agent CLI Usage & Quota Portfolio[/bold blue]",
+        box=theme.table_box,
+        header_style=theme.header_style,
+        padding=theme.table_padding,
+    )
+    table.add_column("ID", style="bold green")
+    table.add_column("Agent Name")
+    table.add_column("Installed", justify="center")
+    table.add_column("Auth Status")
+    table.add_column("Account / Tier")
+    table.add_column("Quota & Usage Metrics")
+
+    for agent_id, info in registry.items():
+        is_installed = installed_map.get(agent_id, {}).get("installed", False)
+        acc = accounts.get(agent_id)
+
+        installed_cell = f"{CHECK} [green]Installed[/green]" if is_installed else f"{DASH} [dim]Not Installed[/dim]"
+        if not acc:
+            auth_cell = f"{DASH} Unknown"
+            account_cell = DASH
+            usage_cell = DASH
+        elif acc.authenticated:
+            auth_cell = f"{CHECK} [green]Authenticated[/green]"
+            account_cell = f"[cyan]{acc.account_type}[/cyan]"
+            if acc.account_identifier:
+                account_cell += f"\n[dim]{acc.account_identifier}[/dim]"
+
+            usage_lines = []
+            if acc.usage_summary:
+                if "five_hour_utilization_pct" in acc.usage_summary:
+                    usage_lines.append(f"5h: [bold green]{acc.usage_summary['five_hour_utilization_pct']}%[/bold green]")
+                if "seven_day_utilization_pct" in acc.usage_summary:
+                    usage_lines.append(f"7d: [bold green]{acc.usage_summary['seven_day_utilization_pct']}%[/bold green]")
+                if "configured_model" in acc.usage_summary:
+                    usage_lines.append(f"Model: [magenta]{acc.usage_summary['configured_model']}[/magenta]")
+            if acc.detected_env_vars:
+                usage_lines.append(f"Env: {', '.join(acc.detected_env_vars)}")
+
+            usage_cell = "\n".join(usage_lines) if usage_lines else "[dim]Active / Ready[/dim]"
+        else:
+            auth_cell = f"{CROSS} [red]Not Logged In[/red]"
+            account_cell = f"[dim]{acc.account_type}[/dim]"
+            usage_cell = DASH
+
+        table.add_row(
+            agent_id,
+            info.name,
+            installed_cell,
+            auth_cell,
+            account_cell,
+            usage_cell,
+        )
+
+    console.print(table)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Inspect and manage the multi-agent-registry catalog.",
@@ -183,6 +248,9 @@ def main():
 
     # Command: list
     subparsers.add_parser("list", help="List all registered and locally installed agent CLIs.")
+
+    # Command: usage
+    subparsers.add_parser("usage", help="Show unified usage, quota, and authentication comparison across all agent CLIs.")
 
     # Command: show <agent_id>
     show_parser = subparsers.add_parser("show", help="Show detailed inspection for a specific agent CLI.")
@@ -201,6 +269,8 @@ def main():
         show_registry(console)
         console.print()
         show_portfolio(console)
+    elif args.subcommand == "usage":
+        show_agent_usage(console)
     elif args.subcommand == "show":
         show_agent_details(args.agent_id, console)
     else:
