@@ -25,7 +25,7 @@ wheels = [
 
 [[package]]
 name = "multi-agent-registry"
-version = "0.3.0"
+version = "0.6.0"
 source = { editable = "." }
 dependencies = [
     { name = "rich" },
@@ -35,7 +35,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "rich", specifier = ">=13.9.4" },
-    { name = "verkit", specifier = ">=0.1.4" },
+    { name = "verkit", specifier = ">=0.2.0" },
 ]
 
 [[package]]
@@ -62,12 +62,12 @@ wheels = [
 
 [[package]]
 name = "verkit"
-version = "0.1.5"
+version = "0.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "rich" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/37/c4/f179bda37f2c6608d8b456233f849526821efbf4dd0c3d7ff46f458a19e7/verkit-0.1.5.tar.gz", hash = "sha256:70d7b0fa6f18c1fa4e0c0b2f2ca318ff0282a2d006c34d83bd8569034c79ef20", size = 9463, upload-time = "2026-08-25T18:59:25.03Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b8/42/8074f60fdf5b0026cf414dc76f4a12fe7581fbe41a115127e1f89590ea6e/verkit-0.2.1.tar.gz", hash = "sha256:9f11e341a0f22cf961b3ec75f82b3a2bc4b9883ddd000f3dd0198bb46eb6102a", size = 11328, upload-time = "2026-09-15T06:06:49.716Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8b/99/2ad1b39a694762d1f4bdb22691ac12ba5f5793fe3f84beff336c351c7b92/verkit-0.1.5-py3-none-any.whl", hash = "sha256:3176908e71301d63e544fd6411d2dacba8d11f301b45b187af47513c141bf1be", size = 9792, upload-time = "2026-08-25T18:59:23.792Z" },
+    { url = "https://files.pythonhosted.org/packages/3a/26/1042329f9a9933447906a288527b640bfaab7369059b27a037c6786a8325/verkit-0.2.1-py3-none-any.whl", hash = "sha256:54482e6b20c8646aba4a4271696dff5a9a39eb883db8719ddd75643b34754c3c", size = 12091, upload-time = "2026-09-15T06:06:48.402Z" },
 ]

@@ -20,6 +20,12 @@ class AgentCLIInfo:
     plugin_template: str = ""
     chat_log_patterns: List[str] = field(default_factory=list)
     chat_parser_type: str = "json"
+    # Where this agent expresses its GLOBAL command allowlist. Distinct from
+    # config_paths above, which are MCP config locations. Populated from
+    # permissions.get_permission_surfaces(); see that module for dialects.
+    permissions_path: Optional[Path] = None
+    permissions_dialect: Optional[str] = None
+    permissions_scope: str = "unsupported"
 
 
 @dataclass

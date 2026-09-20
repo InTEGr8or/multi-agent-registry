@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-import pytest
+
 
 from multi_agent_registry.account import (
     AgentAccountDetails,
@@ -10,7 +10,6 @@ from multi_agent_registry.account import (
     inspect_agy_account,
     inspect_claude_account,
     inspect_copilot_account,
-    inspect_opencode_account,
 )
 
 

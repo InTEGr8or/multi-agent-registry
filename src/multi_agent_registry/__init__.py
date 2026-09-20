@@ -7,9 +7,22 @@ from multi_agent_registry.account import (
 )
 from multi_agent_registry.discovery import (
     DiscoveredChat,
+    RecentAgentActivity,
     discover_agent_chats,
     get_chat_last_active,
     get_chat_workspace,
+    get_recent_agent_activity,
+)
+from multi_agent_registry.permissions import (
+    AllowedCommand,
+    PermissionDiff,
+    PermissionSurface,
+    diff_agent_permissions,
+    diff_all_permissions,
+    get_permission_surfaces,
+    load_allowlist,
+    render_for_agent,
+    select_commands,
 )
 from multi_agent_registry.registry import (
     AgentCLIInfo,
@@ -22,6 +35,7 @@ __all__ = [
     "AgentCLIInfo",
     "AgentAccountDetails",
     "DiscoveredChat",
+    "RecentAgentActivity",
     "get_agent_cli_registry",
     "inspect_agent_cli",
     "inspect_all_agent_clis",
@@ -30,5 +44,15 @@ __all__ = [
     "discover_agent_chats",
     "get_chat_workspace",
     "get_chat_last_active",
+    "get_recent_agent_activity",
+    "AllowedCommand",
+    "PermissionSurface",
+    "PermissionDiff",
+    "load_allowlist",
+    "select_commands",
+    "get_permission_surfaces",
+    "render_for_agent",
+    "diff_agent_permissions",
+    "diff_all_permissions",
 ]
 

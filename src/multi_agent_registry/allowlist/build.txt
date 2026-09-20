@@ -1,0 +1,12 @@
+# Commands that execute project-defined code. Safe in a trusted repo,
+# but not the same class as read-only inspection -- a Makefile recipe
+# or a conftest.py can do anything.
+
+make           # runs arbitrary Makefile recipes
+pytest
+uv run pytest
+ruff
+uv run ruff
+
+ta             # task-agent CLI
+mar            # this registry's own CLI

@@ -1,0 +1,4 @@
+# Commands that reach the network. Not granted by default --
+# pass --network to include this tier.
+
+curl

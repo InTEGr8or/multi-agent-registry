@@ -1,13 +1,13 @@
 """Discovery module for scanning agent chat log files."""
 
-from dataclasses import dataclass
-from datetime import datetime
 import fnmatch
 import glob
 import json
 import os
 import re
 import subprocess
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -255,3 +255,69 @@ def get_chat_last_active(chat: DiscoveredChat) -> Optional[datetime]:
     except Exception:
         pass
     return None
+
+
+def _as_utc(dt: datetime) -> datetime:
+    """Normalize a possibly-naive datetime to timezone-aware UTC."""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+@dataclass
+class RecentAgentActivity:
+    """Most recent known chat activity for one agent CLI within a project."""
+
+    agent_id: str
+    last_active: datetime
+    log_path: Path
+    workspace: Optional[Path] = None
+
+
+def get_recent_agent_activity(
+    project_dir: Optional[Path] = None,
+    limit: int = 5,
+) -> List[RecentAgentActivity]:
+    """Rank agent CLIs by their most recent chat activity in a project.
+
+    Filters discovered chats to those whose workspace resolves to
+    ``project_dir`` (or a subdir of it), mirroring how global chat stores
+    (e.g. ``~/.claude/projects``) map back to a repository. Per agent the
+    newest chat wins; timestamps prefer embedded message timestamps
+    (``get_chat_last_active``) and fall back to file mtime.
+    """
+    if project_dir is None:
+        project_dir = Path.cwd()
+    host_root = _resolve_host_root(project_dir).resolve()
+
+    newest: dict[str, RecentAgentActivity] = {}
+    for chat in discover_agent_chats(project_dir=host_root):
+        workspace = get_chat_workspace(chat)
+        chat_host = _resolve_host_root(workspace).resolve() if workspace else None
+
+        is_global_log = str(chat.path).startswith(str(Path.home())) and not str(
+            chat.path
+        ).startswith(str(host_root))
+        if is_global_log:
+            if chat_host is None or chat_host != host_root:
+                continue
+        elif chat_host is not None and chat_host != host_root:
+            continue
+
+        parsed = get_chat_last_active(chat)
+        if parsed is not None:
+            last = _as_utc(parsed)
+        else:
+            last = datetime.fromtimestamp(chat.path.stat().st_mtime, tz=timezone.utc)
+
+        prev = newest.get(chat.agent_id)
+        if prev is None or last > prev.last_active:
+            newest[chat.agent_id] = RecentAgentActivity(
+                agent_id=chat.agent_id,
+                last_active=last,
+                log_path=chat.path,
+                workspace=workspace,
+            )
+
+    ranked = sorted(newest.values(), key=lambda a: a.last_active, reverse=True)
+    return ranked[:limit]

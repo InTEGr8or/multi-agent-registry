@@ -1,0 +1,37 @@
+# Read-only commands. These report state and mutate nothing.
+#
+# One command per line. A leading "=" means the bare command only;
+# without it the command plus any arguments is allowed.
+# Blank lines and "#" comments are ignored.
+
+=pwd
+=date          # bare only: `date -s ...` sets the system clock
+
+ls
+cat
+head
+tail
+wc
+file
+which
+tree
+
+find
+fd
+grep
+rg
+diff
+sort
+uniq
+jq
+
+# git: interrogation only. Nothing here commits, pushes, or rewrites history.
+git status
+git log
+git diff
+git show
+git branch
+git describe
+git rev-parse
+git remote
+git blame

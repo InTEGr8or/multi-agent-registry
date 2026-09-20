@@ -1,22 +1,95 @@
 import argparse
+import json
 import sys
+from pathlib import Path
+from typing import Optional
 
 import verkit  # type: ignore[import-untyped]
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from verkit.theme import DEFAULT as theme  # type: ignore[import-untyped]
 
 from multi_agent_registry.account import (
     inspect_agent_account,
     inspect_all_agent_accounts,
 )
-from multi_agent_registry.discovery import discover_agent_chats
+from multi_agent_registry.discovery import (
+    discover_agent_chats,
+    get_recent_agent_activity,
+)
+from multi_agent_registry.permissions import (
+    DEFAULT_TIERS,
+    TIER_NETWORK,
+    diff_all_permissions,
+    load_allowlist,
+    render_for_agent,
+    surface_exists,
+)
 from multi_agent_registry.registry import (
     get_agent_cli_registry,
     inspect_agent_cli,
     inspect_all_agent_clis,
 )
-from multi_agent_registry.theme import DEFAULT as theme
+
+class ThemedParser(argparse.ArgumentParser):
+    """ArgumentParser whose help renders through the shared verkit theme.
+
+    verkit publishes visual tokens (``table_box``, ``header_style``,
+    ``panel_box``) but no argparse formatter -- its theme module is explicitly
+    "a convention carrier, not a mandate" -- so the rendering lives here and
+    the styling comes from there.
+
+    ``add_subparsers`` defaults ``parser_class`` to ``type(self)``, so every
+    subcommand's ``--help`` inherits this automatically.
+    """
+
+    def print_help(self, file=None):
+        console = Console(file=file)
+        if self.description:
+            console.print(
+                Panel(
+                    self.description,
+                    title=f"[bold blue]{self.prog}[/bold blue]",
+                    box=theme.panel_box,
+                )
+            )
+        console.print(f"[dim]{self.format_usage().strip()}[/dim]\n")
+
+        actions = [
+            a for a in self._actions if isinstance(a, argparse._SubParsersAction)
+        ]
+        if actions:
+            table = Table(
+                title="[bold blue]Subcommands[/bold blue]",
+                box=theme.table_box,
+                header_style=theme.header_style,
+                padding=theme.table_padding,
+            )
+            table.add_column("Command", style="bold green")
+            table.add_column("Description")
+            for choice in actions[0]._choices_actions:
+                table.add_row(choice.dest, choice.help or "")
+            console.print(table)
+
+        opts = [
+            a
+            for a in self._actions
+            if not isinstance(a, argparse._SubParsersAction) and a.option_strings
+        ]
+        if opts:
+            table = Table(
+                title="[bold blue]Options[/bold blue]",
+                box=theme.table_box,
+                header_style=theme.header_style,
+                padding=theme.table_padding,
+            )
+            table.add_column("Flag", style="cyan")
+            table.add_column("Description")
+            for a in opts:
+                table.add_row(", ".join(a.option_strings), a.help or "")
+            console.print(table)
+
 
 CHECK = "[green]✓[/green]"
 CROSS = "[red]✗[/red]"
@@ -237,8 +310,156 @@ def show_agent_usage(console: Console):
     console.print(table)
 
 
+def show_recent(
+    console: Console,
+    path_arg: Optional[str] = None,
+    limit: int = 5,
+    json_format: bool = False,
+) -> None:
+    """Handler for 'mar recent': rank agent CLIs by recent chat activity."""
+    target = Path(path_arg).resolve() if path_arg else Path.cwd()
+    activities = get_recent_agent_activity(project_dir=target, limit=limit)
+
+    if json_format:
+        registry = get_agent_cli_registry()
+        output = [
+            {
+                "agent_id": a.agent_id,
+                "agent_name": registry[a.agent_id].name if a.agent_id in registry else a.agent_id,
+                "last_active": a.last_active.isoformat(),
+                "log_path": str(a.log_path),
+                "workspace": str(a.workspace) if a.workspace else None,
+            }
+            for a in activities
+        ]
+        console.print(json.dumps(output, indent=2))
+        return
+
+    if not activities:
+        console.print(
+            f"[yellow]No agent chat activity found for [bold]{target}[/bold].[/yellow]"
+        )
+        return
+
+    registry = get_agent_cli_registry()
+    table = Table(
+        title=f"[bold blue]Recent Agent Activity -- {target}[/bold blue]",
+        box=theme.table_box,
+        header_style=theme.header_style,
+        padding=theme.table_padding,
+    )
+    table.add_column("#", style="dim")
+    table.add_column("Agent CLI", style="bold green")
+    table.add_column("Last Active (UTC)", style="green")
+    table.add_column("Workspace / Log", style="dim")
+
+    for idx, act in enumerate(activities, start=1):
+        name = registry[act.agent_id].name if act.agent_id in registry else act.agent_id
+        loc = str(act.workspace) if act.workspace else str(act.log_path)
+        table.add_row(
+            str(idx),
+            name,
+            act.last_active.strftime("%Y-%m-%d %H:%M:%S"),
+            loc,
+        )
+    console.print(table)
+
+
+def show_permissions(console: Console, tiers, agent_id=None, render=False):
+    """Report how the canonical global allowlist compares to what is on disk."""
+    if render and agent_id:
+        rendered = render_for_agent(agent_id, tiers)
+        if rendered is None:
+            console.print(
+                f"[bold red]Error:[/bold red] no expressible global permission "
+                f"surface for '{agent_id}'."
+            )
+            sys.exit(1)
+        console.print(json.dumps(rendered, indent=2))
+        return
+
+    diffs = diff_all_permissions(tiers)
+    if agent_id:
+        diffs = [d for d in diffs if d.agent_id == agent_id]
+        if not diffs:
+            console.print(f"[bold red]Error:[/bold red] unknown agent '{agent_id}'.")
+            sys.exit(1)
+
+    granted = sorted({c.tier for c in load_allowlist() if c.tier in tiers})
+    table = Table(
+        title=f"[bold blue]Global command allowlist -- tiers: {', '.join(granted)}[/bold blue]",
+        box=theme.table_box,
+        header_style=theme.header_style,
+        padding=theme.table_padding,
+    )
+    table.add_column("Agent", style="bold green")
+    table.add_column("Scope")
+    table.add_column("Dialect", style="cyan")
+    table.add_column("On disk", justify="right")
+    table.add_column("Missing", justify="right")
+
+    for d in diffs:
+        if not d.expressible:
+            table.add_row(
+                d.agent_id,
+                f"[yellow]{d.surface.scope}[/yellow]",
+                d.surface.dialect or DASH,
+                DASH,
+                "[yellow]n/a[/yellow]",
+            )
+            continue
+        missing = len(d.missing)
+        table.add_row(
+            d.agent_id,
+            d.surface.scope,
+            d.surface.dialect or DASH,
+            str(len(d.current)),
+            f"[red]{missing}[/red]" if missing else CHECK,
+        )
+    console.print(table)
+
+    for d in diffs:
+        if not d.expressible:
+            console.print(f"\n[yellow]{d.agent_id}[/yellow]: {d.surface.note}")
+            continue
+
+        if not surface_exists(d.surface):
+            console.print(f"\n[dim]{d.agent_id}: no config at {d.surface.path}[/dim]")
+            continue
+
+        if d.missing or d.extra:
+            console.print(f"\n[bold]{d.agent_id}[/bold] [dim]{d.surface.path}[/dim]")
+
+        # A zero count against a non-empty file almost always means the grants
+        # live somewhere that isn't the global surface -- say so, or the number
+        # reads as a bug.
+        if not d.current and d.surface.note:
+            console.print(f"  [yellow]note:[/yellow] {d.surface.note}")
+
+        for entry in d.missing:
+            console.print(f"  [red]+[/red] {entry}")
+
+        if d.extra and agent_id:
+            console.print(
+                f"  [dim]{len(d.extra)} entries present but not in the canonical "
+                f"list (left alone):[/dim]"
+            )
+            for entry in d.extra:
+                console.print(f"  [dim]  ~ {entry}[/dim]")
+        elif d.extra:
+            console.print(
+                f"  [dim]+ {len(d.extra)} entries not in the canonical list "
+                f"(--agent {d.agent_id} to list)[/dim]"
+            )
+
+    console.print(
+        "\n[dim]Read-only: nothing was written. "
+        "Use 'mar permissions --agent <id> --render' to emit one agent's block.[/dim]"
+    )
+
+
 def main():
-    parser = argparse.ArgumentParser(
+    parser = ThemedParser(
         description="Inspect and manage the multi-agent-registry catalog.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -251,6 +472,48 @@ def main():
 
     # Command: usage
     subparsers.add_parser("usage", help="Show unified usage, quota, and authentication comparison across all agent CLIs.")
+
+    # Command: recent
+    recent_parser = subparsers.add_parser(
+        "recent",
+        help="Rank agent CLIs by their most recent chat activity in a repository.",
+    )
+    recent_parser.add_argument(
+        "path",
+        nargs="?",
+        default=None,
+        help="Target repository directory (defaults to cwd)",
+    )
+    recent_parser.add_argument(
+        "--limit",
+        type=int,
+        default=5,
+        help="Maximum number of active agents to return (default: 5)",
+    )
+    recent_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output result as JSON",
+    )
+
+    # Command: permissions
+    perms_parser = subparsers.add_parser(
+        "permissions",
+        help="Compare each agent's global command allowlist to the canonical registry.",
+    )
+    perms_parser.add_argument(
+        "--agent", default=None, help="Limit output to a single agent CLI."
+    )
+    perms_parser.add_argument(
+        "--render",
+        action="store_true",
+        help="Emit the allowlist in one agent's native syntax (requires --agent).",
+    )
+    perms_parser.add_argument(
+        "--network",
+        action="store_true",
+        help="Include the network tier (curl), which is opt-in by default.",
+    )
 
     # Command: show <agent_id>
     show_parser = subparsers.add_parser("show", help="Show detailed inspection for a specific agent CLI.")
@@ -271,6 +534,11 @@ def main():
         show_portfolio(console)
     elif args.subcommand == "usage":
         show_agent_usage(console)
+    elif args.subcommand == "recent":
+        show_recent(console, args.path, limit=args.limit, json_format=args.json)
+    elif args.subcommand == "permissions":
+        tiers = tuple(DEFAULT_TIERS) + ((TIER_NETWORK,) if args.network else ())
+        show_permissions(console, tiers, agent_id=args.agent, render=args.render)
     elif args.subcommand == "show":
         show_agent_details(args.agent_id, console)
     else:

@@ -4,10 +4,12 @@ Provides a unified registry of popular agent CLIs, detection logic, global/proje
 MCP configuration paths, and plugin installation helpers.
 """
 
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-import shutil
 from typing import Dict, List, Optional
+
+from multi_agent_registry.permissions import get_permission_surfaces
 
 
 @dataclass
@@ -25,11 +27,17 @@ class AgentCLIInfo:
     plugin_template: str = ""
     chat_log_patterns: List[str] = field(default_factory=list)
     chat_parser_type: str = "json"
+    # Where this agent expresses its GLOBAL command allowlist. Distinct from
+    # config_paths above, which are MCP config locations. Populated from
+    # permissions.get_permission_surfaces(); see that module for dialects.
+    permissions_path: Optional[Path] = None
+    permissions_dialect: Optional[str] = None
+    permissions_scope: str = "unsupported"
 
 
 def get_agent_cli_registry() -> Dict[str, AgentCLIInfo]:
     home = Path.home()
-    return {
+    registry: Dict[str, AgentCLIInfo] = {
         "claude": AgentCLIInfo(
             id="claude",
             name="Claude Code",
@@ -238,6 +246,18 @@ def get_agent_cli_registry() -> Dict[str, AgentCLIInfo]:
         ),
     }
 
+    # Permission surfaces live in their own module so the dialect knowledge
+    # stays in one place; attach them rather than duplicating the paths here.
+    for agent_id, surface in get_permission_surfaces().items():
+        info = registry.get(agent_id)
+        if info is None:
+            continue
+        info.permissions_path = surface.path
+        info.permissions_dialect = surface.dialect
+        info.permissions_scope = surface.scope
+
+    return registry
+
 
 def inspect_agent_cli(agent_id: str) -> dict:
     """Inspect local installation and MCP registration status for an agent CLI."""
@@ -285,6 +305,9 @@ def inspect_agent_cli(agent_id: str) -> dict:
         "mcp_command_example": info.mcp_command_example,
         "chat_log_patterns": info.chat_log_patterns,
         "chat_parser_type": info.chat_parser_type,
+        "permissions_path": info.permissions_path,
+        "permissions_dialect": info.permissions_dialect,
+        "permissions_scope": info.permissions_scope,
     }
 
 
