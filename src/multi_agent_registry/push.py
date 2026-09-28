@@ -39,6 +39,13 @@ UNPUSHABLE = {
         "covered by the claude push: Grok merges ~/.claude/settings.json rules "
         "into its own rule set, so writing config.toml would duplicate them."
     ),
+    DIALECT_ANTIGRAVITY: (
+        "matching semantics unconfirmed. If Antigravity matches allow rules by "
+        "exact full-string equality (as docs/antigravity.md reports), every "
+        "command(x) rendered here is inert and the dialect needs regex: rules "
+        "instead. Pushing on the current prefix assumption would add entries "
+        "that look applied but grant nothing -- see docs/antigravity.md."
+    ),
 }
 
 

@@ -354,6 +354,8 @@ def test_apply_unions_and_keeps_hand_added_entries(tmp_path, monkeypatch):
     plan = apply_push("claude", dry_run=False)
     data = json.loads(cfg.read_text())
 
+    # Guards against the test passing while reading the real ~/.claude config.
+    assert plan.existing_kept == 1
     assert plan.written
     assert "Bash(my-bespoke-thing:*)" in data["permissions"]["allow"]
     assert "Bash(git log:*)" in data["permissions"]["allow"]
@@ -413,3 +415,11 @@ def test_opencode_push_targets_the_global_permission_block(tmp_path, monkeypatch
     data = json.loads(cfg.read_text())
     assert data["permission"]["bash"]["git log *"] == "allow"
     assert data["mcp"]["task_agent"] == {"type": "local"}
+
+
+def test_antigravity_push_is_gated_on_unconfirmed_matching_semantics():
+    """command(x) may be matched exactly, not by prefix. Until that is
+    confirmed, pushing would add rules that look applied but grant nothing."""
+    plan = plan_push("agy")
+    assert not plan.pushable
+    assert "semantics" in plan.skipped_reason
