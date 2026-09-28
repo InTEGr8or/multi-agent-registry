@@ -142,7 +142,58 @@ for d in diff_all_permissions():
 | `agy` | `~/.gemini/antigravity-cli/settings.json` → `permissions.allow` | `command(git log)` |
 | `opencode` | `~/.config/opencode/opencode.json` → top-level `permission.bash` | `{"git log *": "allow"}` |
 | `gemini` | `~/.gemini/policies/*.toml` → `commandPrefix` | `["git log"]` |
+| `grok` | `~/.grok/config.toml` → `[permission] allow` | `Bash(git log:*)` (also reads Claude's settings) |
 | `copilot` | `~/.copilot/permissions-config.json` — **per-directory only** | no global form |
+
+### The allowlist pipeline
+
+Four stages. Each writes to its own place, so no stage can destroy another's work.
+
+```
+scrape  ->  normalize  ->  (you edit)  ->  push
+```
+
+```bash
+mar permissions scrape              # 1. harvest what every agent already allows
+mar permissions normalize           # 2. collapse into the canonical inter-lingua
+mar permissions normalize --merge   #    append candidates to review.txt for triage
+$EDITOR ~/.config/multi-agent-registry/allowlist/*.txt
+mar permissions push                # 4. dry run: what each agent would gain
+mar permissions push --apply        #    merge it in, after a backup
+```
+
+**1. Scrape** reads every agent's `allow` rules — global *and* project-level, across
+every repo — into one raw file per agent at
+`~/.local/share/multi-agent-registry/scraped/<agent>.txt`. Machine-written, and
+overwritten on each scrape. `deny` and `ask` rules are never harvested; pulling a
+deny rule into an allowlist would silently invert it.
+
+**2. Normalize** parses each native entry back into the canonical form (the inverse
+of the renderers) and collapses it to its command head — so
+`git --no-pager log -n 10 --oneline --graph --all` becomes `git log`. That is where
+the list gets short enough to read.
+
+Anything whose generalization would widen a grant goes to the **`review` tier**,
+which is not in `DEFAULT_TIERS` and is never pushed: `ssh host "<cmd>"`,
+path-qualified binaries, compound commands. You promote them by hand.
+
+**3. You edit.** Candidates land in `review.txt`; move lines into `inspect.txt`,
+`build.txt`, or `network.txt` to grant them. Normalization only ever *appends*, so
+a re-scrape cannot clobber an edit.
+
+**4. Push** renders canonical entries in each agent's own dialect and merges them
+in — union, never replace, after a timestamped backup. Hand-added entries survive.
+Dry run by default.
+
+Two layers of canonical list, and the split matters:
+
+| Layer | Path | For |
+|---|---|---|
+| Shipped | `src/multi_agent_registry/allowlist/` | generic, safe, public |
+| Machine-local | `~/.config/multi-agent-registry/allowlist/` | anything with a hostname, IP, username, or personal path |
+
+The overlay exists because the shipped directory goes into the wheel and onto PyPI.
+A scraped `ssh nuc01` in there would be permanent and public.
 
 Inspect and diff from the CLI:
 

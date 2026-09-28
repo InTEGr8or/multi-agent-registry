@@ -5,3 +5,7 @@ dist/
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
+
+# Harvested allowlist data: machine-specific, and this repo is public.
+# Scrape output belongs in ~/.local/share/multi-agent-registry/scraped/.
+docs/allowlist-ingestion.json

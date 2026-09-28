@@ -26,6 +26,9 @@ TIER_INSPECT = "inspect"
 TIER_BUILD = "build"
 #: Commands that reach the network.
 TIER_NETWORK = "network"
+#: Scraped commands awaiting human triage. Deliberately NOT in DEFAULT_TIERS --
+#: nothing reaches a real agent config until a person moves it into a real tier.
+TIER_REVIEW = "review"
 
 #: Tiers granted unless a caller asks for more.
 DEFAULT_TIERS = (TIER_INSPECT, TIER_BUILD)
@@ -39,8 +42,9 @@ class AllowedCommand:
     ``"any"`` means the command plus any arguments, ``"none"`` means the bare
     command only. Renderers expand this per dialect rather than guessing.
 
-    Instances come from ``load_allowlist()``, which reads the editable tier
-    files in ``allowlist/``; nothing here is hardcoded.
+    Instances come from ``load_allowlist()``, which merges the shipped tier
+    files in ``allowlist/`` with the machine-local overlay in
+    ``~/.config/multi-agent-registry/allowlist/``; nothing here is hardcoded.
     """
 
     cmd: str
@@ -53,7 +57,19 @@ TIER_FILES = {
     TIER_INSPECT: "inspect.txt",
     TIER_BUILD: "build.txt",
     TIER_NETWORK: "network.txt",
+    TIER_REVIEW: "review.txt",
 }
+
+
+def user_allowlist_dir() -> Path:
+    """Machine-local canonical overlay.
+
+    Anything carrying a hostname, IP, username, or personal path belongs here
+    and never in the shipped ``allowlist/``: that directory is published to
+    PyPI inside the wheel, so a machine-specific entry there would be
+    permanent and public.
+    """
+    return Path.home() / ".config" / "multi-agent-registry" / "allowlist"
 
 
 def parse_allowlist_file(text: str, tier: str) -> List[AllowedCommand]:
@@ -82,14 +98,26 @@ def load_allowlist() -> tuple:
     every import of this package.
     """
     commands: List[AllowedCommand] = []
-    root = importlib.resources.files("multi_agent_registry") / "allowlist"
+    shipped = importlib.resources.files("multi_agent_registry") / "allowlist"
+    overlay = user_allowlist_dir()
+
     for tier, filename in TIER_FILES.items():
-        try:
-            text = (root / filename).read_text(encoding="utf-8")
-        except (FileNotFoundError, OSError, ModuleNotFoundError):
-            continue
-        commands.extend(parse_allowlist_file(text, tier))
-    return tuple(commands)
+        for root in (shipped, overlay):
+            try:
+                text = (root / filename).read_text(encoding="utf-8")
+            except (FileNotFoundError, OSError, ModuleNotFoundError, NotADirectoryError):
+                continue
+            commands.extend(parse_allowlist_file(text, tier))
+
+    # Same command from both layers: keep one.
+    seen = set()
+    unique = []
+    for c in commands:
+        key = (c.cmd, c.args, c.tier)
+        if key not in seen:
+            seen.add(key)
+            unique.append(c)
+    return tuple(unique)
 
 
 def select_commands(tiers=DEFAULT_TIERS) -> List[AllowedCommand]:
@@ -105,6 +133,7 @@ DIALECT_ANTIGRAVITY = "antigravity-settings"
 DIALECT_OPENCODE = "opencode-json"
 DIALECT_GEMINI_POLICY = "gemini-policy-toml"
 DIALECT_COPILOT = "copilot-locations"
+DIALECT_GROK = "grok-config-toml"
 
 SCOPE_GLOBAL = "global"
 SCOPE_PER_DIRECTORY = "per_directory"
@@ -163,6 +192,17 @@ def get_permission_surfaces() -> Dict[str, PermissionSurface]:
                 "are mode-scoped, not global, and are not counted as grants."
             ),
         ),
+        "grok": PermissionSurface(
+            agent_id="grok",
+            path=home / ".grok" / "config.toml",
+            dialect=DIALECT_GROK,
+            scope=SCOPE_GLOBAL,
+            note=(
+                "[permission] allow in config.toml. Grok also merges "
+                "~/.claude/settings.json rules, so the claude surface already "
+                "covers it -- `grok inspect` shows which source is loaded."
+            ),
+        ),
         "copilot": PermissionSurface(
             agent_id="copilot",
             path=home / ".copilot" / "permissions-config.json",
@@ -209,11 +249,22 @@ def render_gemini_policy(commands: List[AllowedCommand]) -> List[str]:
     return [c.cmd for c in commands]
 
 
+def render_grok(commands: List[AllowedCommand]) -> List[str]:
+    """Grok: the same rule strings as Claude Code.
+
+    Grok's docs define ``Bash(git commit:*)`` as prefix matching and
+    ``Bash(npm run build)`` as exact, matching Claude's spelling, and it reads
+    ``~/.claude/settings.json`` directly -- so one dialect serves both.
+    """
+    return render_claude(commands)
+
+
 RENDERERS = {
     DIALECT_CLAUDE: render_claude,
     DIALECT_ANTIGRAVITY: render_antigravity,
     DIALECT_OPENCODE: render_opencode,
     DIALECT_GEMINI_POLICY: render_gemini_policy,
+    DIALECT_GROK: render_grok,
 }
 
 
@@ -283,6 +334,14 @@ def read_current_entries(surface: PermissionSurface) -> List[str]:
         text = surface.path.read_text(encoding="utf-8")
     except Exception:
         return []
+
+    if surface.dialect == DIALECT_GROK:
+        try:
+            data = tomllib.loads(text)
+        except Exception:
+            return []
+        allow = data.get("permission", {}).get("allow", [])
+        return [str(item) for item in allow] if isinstance(allow, list) else []
 
     if surface.dialect in (DIALECT_CLAUDE, DIALECT_ANTIGRAVITY):
         try:

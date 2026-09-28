@@ -18,14 +18,19 @@ from multi_agent_registry.discovery import (
     discover_agent_chats,
     get_recent_agent_activity,
 )
+from multi_agent_registry.normalize import merge_into_review, normalize_entries
 from multi_agent_registry.permissions import (
     DEFAULT_TIERS,
     TIER_NETWORK,
+    get_permission_surfaces,
+    user_allowlist_dir,
     diff_all_permissions,
     load_allowlist,
     render_for_agent,
     surface_exists,
 )
+from multi_agent_registry.push import apply_push, plan_push
+from multi_agent_registry.scrape import scrape_agent, scraped_dir, write_scraped
 from multi_agent_registry.registry import (
     get_agent_cli_registry,
     inspect_agent_cli,
@@ -458,6 +463,160 @@ def show_permissions(console: Console, tiers, agent_id=None, render=False):
     )
 
 
+def run_scrape(console: Console, agent_id=None):
+    """Stage 1: harvest every allow entry each agent already has."""
+    agents = [agent_id] if agent_id else list(get_permission_surfaces())
+    table = Table(
+        title="[bold blue]Scrape -- what each agent already allows[/bold blue]",
+        box=theme.table_box,
+        header_style=theme.header_style,
+        padding=theme.table_padding,
+    )
+    table.add_column("Agent", style="bold green")
+    table.add_column("Configs", justify="right")
+    table.add_column("Entries", justify="right")
+    table.add_column("deny/ask left", justify="right")
+    table.add_column("Written to")
+
+    total = 0
+    for a in agents:
+        try:
+            entries, stats = scrape_agent(a)
+        except ValueError as e:
+            console.print(f"[bold red]Error:[/bold red] {e}")
+            sys.exit(1)
+        out = write_scraped(a, entries, stats)
+        total += stats.entries
+        table.add_row(
+            a,
+            str(stats.files_read),
+            str(stats.entries),
+            str(stats.skipped_deny_ask) if stats.skipped_deny_ask else DASH,
+            f"[dim]{out.name}[/dim]",
+        )
+    console.print(table)
+    console.print(
+        f"\n[dim]{total} raw entries in {scraped_dir()}"
+        "\nMachine-written and overwritten on each scrape; deny/ask rules are "
+        "never harvested into an allowlist.[/dim]"
+    )
+
+
+def run_normalize(console: Console, apply_merge=False):
+    """Stage 2: collapse scraped entries into the canonical inter-lingua."""
+    all_entries = []
+    for a in get_permission_surfaces():
+        try:
+            entries, _ = scrape_agent(a)
+        except ValueError:
+            continue
+        all_entries.extend(entries)
+
+    result = normalize_entries(all_entries)
+
+    table = Table(
+        title="[bold blue]Normalize -- native entries to inter-lingua[/bold blue]",
+        box=theme.table_box,
+        header_style=theme.header_style,
+        padding=theme.table_padding,
+    )
+    table.add_column("Stage", style="bold cyan")
+    table.add_column("Count", justify="right")
+    table.add_row("raw scraped", str(result.raw))
+    table.add_row("parsed as commands", str(result.parsed))
+    table.add_row("already canonical", str(result.already_canonical))
+    table.add_row("[green]new, clean[/green]", str(len(result.simplified)))
+    table.add_row("[yellow]new, needs review[/yellow]", str(len(result.review)))
+    console.print(table)
+
+    if result.skipped:
+        console.print(
+            "\n[dim]set aside: "
+            + ", ".join(f"{k} ({v})" for k, v in sorted(result.skipped.items()))
+            + "[/dim]"
+        )
+
+    if result.simplified:
+        console.print("\n[bold green]Generalized cleanly[/bold green]")
+        for c in result.simplified:
+            console.print(f"  {c.cmd}")
+
+    if result.review:
+        console.print("\n[bold yellow]Needs review[/bold yellow]")
+        for c in result.review:
+            console.print(f"  {c.cmd}")
+
+    if apply_merge:
+        added, path = merge_into_review(result, user_allowlist_dir())
+        console.print(
+            f"\n[green]Appended {added} candidate(s)[/green] to {path}"
+            "\n[dim]The review tier is not granted to any agent. Move lines into "
+            "inspect.txt / build.txt / network.txt to grant them.[/dim]"
+        )
+    else:
+        console.print(
+            f"\n[dim]Nothing written. Re-run with --merge to append these to "
+            f"{user_allowlist_dir() / 'review.txt'} for triage.[/dim]"
+        )
+
+
+def run_push(console: Console, tiers, agent_id=None, apply_write=False):
+    """Stage 4: write the canonical allowlist out in each agent's dialect."""
+    agents = [agent_id] if agent_id else list(get_permission_surfaces())
+    plans = []
+    for a in agents:
+        try:
+            plans.append(
+                apply_push(a, tiers, dry_run=not apply_write) if apply_write
+                else plan_push(a, tiers)
+            )
+        except ValueError as e:
+            console.print(f"[bold red]Error:[/bold red] {e}")
+            sys.exit(1)
+
+    table = Table(
+        title="[bold blue]Push -- canonical allowlist to each agent[/bold blue]"
+        + ("" if apply_write else " [yellow](dry run)[/yellow]"),
+        box=theme.table_box,
+        header_style=theme.header_style,
+        padding=theme.table_padding,
+    )
+    table.add_column("Agent", style="bold green")
+    table.add_column("Additions", justify="right")
+    table.add_column("Kept", justify="right")
+    table.add_column("Status")
+    for p in plans:
+        if not p.pushable:
+            table.add_row(p.agent_id, DASH, DASH, "[yellow]skipped[/yellow]")
+            continue
+        table.add_row(
+            p.agent_id,
+            str(len(p.additions)) if p.additions else CHECK,
+            str(p.existing_kept),
+            "[green]written[/green]" if p.written else "[dim]would write[/dim]",
+        )
+    console.print(table)
+
+    for p in plans:
+        if not p.pushable:
+            console.print(f"\n[yellow]{p.agent_id}[/yellow]: {p.skipped_reason}")
+            continue
+        if p.additions and not p.written:
+            console.print(f"\n[bold]{p.agent_id}[/bold] [dim]{p.path}[/dim]")
+            for e in p.additions[:8]:
+                console.print(f"  [green]+[/green] {e}")
+            if len(p.additions) > 8:
+                console.print(f"  [dim]... {len(p.additions) - 8} more[/dim]")
+        if p.backup:
+            console.print(f"  [dim]backup: {p.backup}[/dim]")
+
+    if not apply_write:
+        console.print(
+            "\n[dim]Dry run -- nothing written. Re-run with --apply to merge "
+            "(existing entries are unioned, never replaced, after a backup).[/dim]"
+        )
+
+
 def main():
     parser = ThemedParser(
         description="Inspect and manage the multi-agent-registry catalog.",
@@ -502,6 +661,17 @@ def main():
         help="Compare each agent's global command allowlist to the canonical registry.",
     )
     perms_parser.add_argument(
+        "stage",
+        nargs="?",
+        default="diff",
+        choices=["diff", "scrape", "normalize", "push"],
+        help=(
+            "diff (default): compare on-disk to canonical. scrape: harvest what "
+            "agents already allow. normalize: collapse that into the canonical "
+            "inter-lingua. push: write canonical out in each agent's dialect."
+        ),
+    )
+    perms_parser.add_argument(
         "--agent", default=None, help="Limit output to a single agent CLI."
     )
     perms_parser.add_argument(
@@ -513,6 +683,16 @@ def main():
         "--network",
         action="store_true",
         help="Include the network tier (curl), which is opt-in by default.",
+    )
+    perms_parser.add_argument(
+        "--merge",
+        action="store_true",
+        help="normalize: append the candidates to the machine-local review.txt.",
+    )
+    perms_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="push: actually write the agent configs (default is a dry run).",
     )
 
     # Command: show <agent_id>
@@ -538,7 +718,14 @@ def main():
         show_recent(console, args.path, limit=args.limit, json_format=args.json)
     elif args.subcommand == "permissions":
         tiers = tuple(DEFAULT_TIERS) + ((TIER_NETWORK,) if args.network else ())
-        show_permissions(console, tiers, agent_id=args.agent, render=args.render)
+        if args.stage == "scrape":
+            run_scrape(console, agent_id=args.agent)
+        elif args.stage == "normalize":
+            run_normalize(console, apply_merge=args.merge)
+        elif args.stage == "push":
+            run_push(console, tiers, agent_id=args.agent, apply_write=args.apply)
+        else:
+            show_permissions(console, tiers, agent_id=args.agent, render=args.render)
     elif args.subcommand == "show":
         show_agent_details(args.agent_id, console)
     else:

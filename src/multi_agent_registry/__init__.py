@@ -13,6 +13,11 @@ from multi_agent_registry.discovery import (
     get_chat_workspace,
     get_recent_agent_activity,
 )
+from multi_agent_registry.normalize import (
+    normalize_entries,
+    parse_native,
+    simplify_command,
+)
 from multi_agent_registry.permissions import (
     AllowedCommand,
     PermissionDiff,
@@ -24,12 +29,15 @@ from multi_agent_registry.permissions import (
     render_for_agent,
     select_commands,
 )
+from multi_agent_registry.push import apply_push, plan_push
 from multi_agent_registry.registry import (
     AgentCLIInfo,
     get_agent_cli_registry,
     inspect_agent_cli,
     inspect_all_agent_clis,
 )
+
+from multi_agent_registry.scrape import scrape_agent, write_scraped
 
 __all__ = [
     "AgentCLIInfo",
@@ -49,6 +57,13 @@ __all__ = [
     "PermissionSurface",
     "PermissionDiff",
     "load_allowlist",
+    "parse_native",
+    "simplify_command",
+    "normalize_entries",
+    "scrape_agent",
+    "write_scraped",
+    "plan_push",
+    "apply_push",
     "select_commands",
     "get_permission_surfaces",
     "render_for_agent",
