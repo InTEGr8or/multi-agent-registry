@@ -119,6 +119,11 @@ def get_agent_cli_registry() -> Dict[str, AgentCLIInfo]:
             plugin_path=home / ".config" / "grok" / "plugins",
             skills_path=home / ".config" / "grok" / "skills",
             plugin_template="grok",
+            chat_log_patterns=[
+                "~/.grok/sessions/**/summary.json",
+                "/mnt/c/Users/*/.grok/sessions/**/summary.json",
+            ],
+            chat_parser_type="json",
         ),
         "cursor": AgentCLIInfo(
             id="cursor",

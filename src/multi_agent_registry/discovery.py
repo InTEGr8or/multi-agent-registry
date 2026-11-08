@@ -212,6 +212,26 @@ def get_chat_workspace(chat: DiscoveredChat) -> Optional[Path]:
         elif chat.parser_type == "markdown":
             return chat.path.parent
         elif chat.parser_type == "json":
+            try:
+                raw_text = chat.path.read_text(encoding="utf-8", errors="replace")
+                data = json.loads(raw_text)
+                if isinstance(data, dict):
+                    cwd = (
+                        data.get("info", {}).get("cwd")
+                        or data.get("cwd")
+                        or data.get("directory")
+                    )
+                    if cwd:
+                        return Path(cwd)
+            except Exception:
+                pass
+            if chat.agent_id == "grok" and "%" in chat.path.parent.parent.name:
+                import urllib.parse
+
+                try:
+                    return Path(urllib.parse.unquote(chat.path.parent.parent.name))
+                except Exception:
+                    pass
             with open(chat.path, "r") as f:
                 content = f.read(10000)
             match = re.search(r"Current Workspace Directory \((.*?)\)", content)
@@ -252,6 +272,23 @@ def get_chat_last_active(chat: DiscoveredChat) -> Optional[datetime]:
                     if last_ts is None or parsed > last_ts:
                         last_ts = parsed
             return last_ts
+        elif chat.parser_type == "json":
+            try:
+                raw_text = chat.path.read_text(encoding="utf-8", errors="replace")
+                data = json.loads(raw_text)
+                if isinstance(data, dict):
+                    ts = (
+                        data.get("last_active_at")
+                        or data.get("updated_at")
+                        or (data.get("time", {}).get("updated") if isinstance(data.get("time"), dict) else None)
+                    )
+                    if ts:
+                        try:
+                            return datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+                        except ValueError:
+                            pass
+            except Exception:
+                pass
     except Exception:
         pass
     return None
